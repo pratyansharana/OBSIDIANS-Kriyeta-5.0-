@@ -48,27 +48,27 @@ class LoginActivity : AppCompatActivity() {
                             return@addOnCompleteListener
                         }
 
-                        // 🔥 CHECK IF DOCUMENT EXISTS
-                        db.collection("field_staff")
-                            .document(uid)
-                            .get()
+                        val docRef = db.collection("field_staff").document(uid)
+
+                        // 🔥 METHOD 3 (SAFE CHECK)
+                        docRef.get()
                             .addOnSuccessListener { document ->
 
                                 if (!document.exists()) {
 
-                                    // 🔥 CREATE NEW WORKER DOCUMENT
                                     val data = hashMapOf(
                                         "fsid" to uid,
                                         "email" to emailText,
                                         "name" to "Worker",
+                                        "department" to "Road Maintenance",
+                                        "designation" to "Field Worker",
+                                        "resolvedCount" to 0,
                                         "duty_status" to false,
                                         "assignedTask" to "",
                                         "location" to GeoPoint(0.0, 0.0)
                                     )
 
-                                    db.collection("field_staff")
-                                        .document(uid)
-                                        .set(data)
+                                    docRef.set(data)
                                 }
 
                                 Toast.makeText(this, "Login Successful ✅", Toast.LENGTH_SHORT).show()
