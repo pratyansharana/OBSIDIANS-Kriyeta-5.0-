@@ -103,7 +103,7 @@ const parseYOLO = (output: any) => {
 
     setDetections(newDetections);
 
-    if (now - lastSpeechTime.current > 4000) {
+    if (now - lastSpeechTime.current > 10000) {
       Speech.stop();
       Speech.speak('Pothole detected');
       lastSpeechTime.current = now;
