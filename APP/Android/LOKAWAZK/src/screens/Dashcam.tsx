@@ -5,6 +5,7 @@ import { LocationObjectCoords } from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import NetInfo from '@react-native-community/netinfo';
 import * as SQLite from 'expo-sqlite';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 // 🔥 PROJECT IMPORTS
 import { addToQueue, processQueue, initDB } from '../services/QueueService';
@@ -72,22 +73,57 @@ export default function Dashcam() {
    * 💾 Snapshot, Saving, and Queuing logic
    * Now strictly enforces UserID injection
    */
+/**
+   * 💾 Snapshot, Saving, and Queuing logic
+   * Now strictly enforces UserID injection AND Image Compression
+   */
+/**
+   * 💾 Snapshot, Saving, and Queuing logic
+   * Includes Image Compression and File Size Logging
+   */
   const handlePotholeCapture = async (coords: LocationObjectCoords | null) => {
     if (!cameraRef.current) return;
 
-    // Capture most recent UID for data separation
     const currentUserId = auth.currentUser?.uid;
-    
     setSessionCount(prev => prev + 1);
 
     try {
+      // 1. Take the raw photo
       const photo = await cameraRef.current.takePhoto({ enableShutterSound: false });
       const sourcePath = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
+      
+      // 📊 LOG BEFORE COMPRESSION
+      const originalInfo = await FileSystem.getInfoAsync(sourcePath);
+      const originalSize = originalInfo.exists ? (originalInfo.size / 1024 / 1024).toFixed(2) : '???';
+      console.log(`📸 Original Photo Taken | Size: ${originalSize} MB`);
+      console.log(`🗜️ Starting compression...`);
+
+      // 2. Compress the image
+      const compressedImage = await ImageManipulator.manipulateAsync(
+        sourcePath,
+        [{ resize: { width: 1080 } }], 
+        { 
+          compress: 0.6, 
+          format: ImageManipulator.SaveFormat.JPEG 
+        }
+      );
+
+      // 📊 LOG AFTER COMPRESSION
+      const compressedInfo = await FileSystem.getInfoAsync(compressedImage.uri);
+      const compressedSize = compressedInfo.exists ? (compressedInfo.size / 1024 / 1024).toFixed(2) : '???';
+      console.log(`✅ Compression Complete | New Size: ${compressedSize} MB`);
+      
+      // (Optional) Calculate and log the savings
+      if (originalInfo.exists && compressedInfo.exists) {
+         const savedMB = ((originalInfo.size - compressedInfo.size) / 1024 / 1024).toFixed(2);
+         console.log(`📉 Storage Saved: ${savedMB} MB`);
+      }
+
       const fileName = `pothole_${Date.now()}.jpg`;
       const permanentPath = `${FileSystem.documentDirectory}${fileName}`;
 
-      // 1. Move to permanent storage
-      await FileSystem.copyAsync({ from: sourcePath, to: permanentPath });
+      // 3. Move the COMPRESSED image to permanent storage
+      await FileSystem.copyAsync({ from: compressedImage.uri, to: permanentPath });
 
       if (!coords) {
         console.warn('⚠️ No GPS. Detection saved locally but not queued.');
@@ -97,7 +133,7 @@ export default function Dashcam() {
       const netState = await NetInfo.fetch();
 
       if (netState.isConnected) {
-        // 2. Attempt Online Upload with UserID
+        // 4. Attempt Online Upload
         const success = await uploadPotholeReport(
           permanentPath, 
           coords.latitude, 
@@ -106,11 +142,10 @@ export default function Dashcam() {
         );
         
         if (!success) {
-          // Fallback to queue if firebase upload task fails
           addToQueue(permanentPath, coords.latitude, coords.longitude, currentUserId);
         }
       } else {
-        // 3. Offline: Add to SQLite Queue
+        // 5. Offline Queue
         addToQueue(permanentPath, coords.latitude, coords.longitude, currentUserId);
       }
 

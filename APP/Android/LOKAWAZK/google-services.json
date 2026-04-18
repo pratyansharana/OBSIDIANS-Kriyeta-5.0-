@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "1006188739154",
+    "project_id": "lokawazk-be431",
+    "storage_bucket": "lokawazk-be431.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1006188739154:android:741c86f153512d9d417d8b",
+        "android_client_info": {
+          "package_name": "com.pd.lokawaaz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1006188739154-21dgos5snian5cj4qssdluvqn7adq6qg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pd.lokawaaz",
+            "certificate_hash": "b269359c22805d7cc25f4f9a0eb0045ce875d277"
+          }
+        },
+        {
+          "client_id": "1006188739154-9k5d01c1gso34666pgquku8q7a10pi2h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pd.lokawaaz",
+            "certificate_hash": "2f8c2e77fa1c1ec21567e88e341bdef27375acd5"
+          }
+        },
+        {
+          "client_id": "1006188739154-ij99hc7kccn9ohgp3bmp8004nr3i5d8e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwgU5vsJAsRfFyaN9s8-BaiaIhZPhz958"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1006188739154-ij99hc7kccn9ohgp3bmp8004nr3i5d8e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

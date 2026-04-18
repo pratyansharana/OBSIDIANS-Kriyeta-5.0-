@@ -88,4 +88,17 @@ class LoginActivity : AppCompatActivity() {
                 }
         }
     }
+
+    // 🔥 LOGIN RETENTION (AUTO LOGIN)
+    override fun onStart() {
+        super.onStart()
+
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if (currentUser != null) {
+            // User already logged in → skip login screen
+            startActivity(Intent(this, DashboardActivity::class.java))
+            finish()
+        }
+    }
 }

@@ -46,7 +46,6 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var locationCallback: LocationCallback
     private var workerMarker: Marker? = null
 
-    // 🔥 NEW: real-time listener
     private var taskListener: ListenerRegistration? = null
 
     private val cameraLauncher = registerForActivityResult(
@@ -87,23 +86,54 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             return
         }
 
-        // Duty status
+        // 🔥 LOAD DUTY STATUS
         db.collection("field_staff")
             .document(uid)
             .get()
             .addOnSuccessListener { doc ->
                 val isOnDuty = doc.getBoolean("duty_status") ?: false
                 switchDuty.isChecked = isOnDuty
+
                 if (isOnDuty) startLocationUpdates()
+                else stopLocationUpdates()
             }
 
+        // 🔥 UPDATED TOGGLE LOGIC
         switchDuty.setOnCheckedChangeListener { _, isChecked ->
-            db.collection("field_staff")
-                .document(uid)
-                .update("duty_status", isChecked)
 
-            if (isChecked) startLocationUpdates()
-            else stopLocationUpdates()
+            if (isChecked) {
+                // 🟢 ON DUTY
+                db.collection("field_staff")
+                    .document(uid)
+                    .update("duty_status", true)
+
+                startLocationUpdates()
+
+            } else {
+                // 🔴 OFF DUTY
+                db.collection("field_staff")
+                    .document(uid)
+                    .update(
+                        mapOf(
+                            "duty_status" to false,
+                            "assignedTask" to ""   // 🔥 REMOVE TASK
+                        )
+                    )
+
+                stopLocationUpdates()
+
+                // 🔥 CLEAR UI
+                currentRid = null
+
+                txtTask.text = "Off Duty"
+                txtDescription.text = "You are currently off duty."
+
+                imgPothole.setImageDrawable(null)
+                btnCaptureImage.visibility = View.GONE
+                btnSubmit.visibility = View.GONE
+
+                if (::mMap.isInitialized) mMap.clear()
+            }
         }
 
         val mapFragment = supportFragmentManager
@@ -114,6 +144,7 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
         listenForTaskUpdates(uid)
 
         btnCaptureImage.setOnClickListener {
+
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
 
@@ -147,12 +178,17 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 if (doc == null || !doc.exists()) return@addSnapshotListener
 
+                val isOnDuty = doc.getBoolean("duty_status") ?: false
+
+                // ❌ IGNORE if OFF DUTY
+                if (!isOnDuty) return@addSnapshotListener
+
                 val newRid = doc.getString("assignedTask")
 
-                // Prevent unnecessary reload
                 if (newRid == currentRid) return@addSnapshotListener
 
                 if (newRid.isNullOrEmpty()) {
+
                     currentRid = null
 
                     txtTask.text = "No Assigned Task"
@@ -165,6 +201,7 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
                     if (::mMap.isInitialized) mMap.clear()
 
                 } else {
+
                     currentRid = newRid
 
                     txtTask.text = "Task Assigned"
@@ -178,7 +215,6 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             }
     }
 
-    // 🔥 LOCATION
     private fun startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
