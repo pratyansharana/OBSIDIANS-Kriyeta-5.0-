@@ -36,7 +36,10 @@
         </provider>
 
         <!-- ACTIVITIES -->
+        <activity android:name=".ProfileActivity" />
         <activity android:name=".DashboardActivity" />
+
+
 
         <activity
             android:name=".LoginActivity"
