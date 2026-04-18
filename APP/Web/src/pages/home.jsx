@@ -224,7 +224,11 @@ const PIE_COLORS = ["#138808", "#e76f51", "#0f2a56"];
           ) : (
             <div className="reports-list">
               {reports.map((report) => (
-                <div className="report-card" key={report.id}>
+                <div
+                className="report-card"
+                key={report.id}
+                onClick={() => navigate(`/report/${report.id}`)}
+                >
                     {selectionMode && (
                         <div className="report-select-row">
                             <input
