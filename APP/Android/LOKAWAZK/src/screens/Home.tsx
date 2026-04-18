@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, FlatList,
-  SafeAreaView, StatusBar, Dimensions, Pressable
+  SafeAreaView, StatusBar, Dimensions, Pressable, ActivityIndicator
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { collection, getCountFromServer } from 'firebase/firestore';
 import { auth, db } from '../Firebase/FirebaseConfig';
 import { useAppTheme } from '../Context/Themecontext';
@@ -30,15 +30,29 @@ const HomeScreen = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('My detections');
   const [totalPotholes, setTotalPotholes] = useState(0);
+  
+  // ✅ New loading state for the dashcam button
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
 
   // 🔥 Optimized Firestore fetch
   useEffect(() => {
     const fetchCount = async () => {
-      const snapshot = await getCountFromServer(collection(db, 'pothole_reports'));
-      setTotalPotholes(snapshot.data().count);
+      try {
+        const snapshot = await getCountFromServer(collection(db, 'pothole_reports'));
+        setTotalPotholes(snapshot.data().count);
+      } catch (error) {
+        console.log("Error fetching count:", error);
+      }
     };
     fetchCount();
   }, []);
+
+  // ✅ Reset the loading button when the user navigates back to Home
+  useFocusEffect(
+    useCallback(() => {
+      setIsCameraStarting(false);
+    }, [])
+  );
 
   // 🧠 Memoized greeting
   const greeting = useMemo(() => {
@@ -50,15 +64,22 @@ const HomeScreen = () => {
 
   // ⚡ Handlers
   const handleDashcam = useCallback(() => {
-    navigation.navigate('Dashcam' as never);
-  }, []);
+    // 1. Show the loading spinner instantly
+    setIsCameraStarting(true);
+    
+    // 2. Use a tiny timeout to allow the UI to actually render the spinner 
+    // before the heavy Dashcam screen locks up the JS thread during mount.
+    setTimeout(() => {
+      navigation.navigate('Dashcam' as never);
+    }, 150);
+  }, [navigation]);
 
   const handleCategoryPress = useCallback((title: string) => {
     setSelectedCategory(title);
     if (title === 'My detections') {
       navigation.navigate('Mydetections' as never);
     }
-  }, []);
+  }, [navigation]);
 
   // 🧩 Render Item
   const renderItem = useCallback(({ item }: { item: Category }) => {
@@ -87,7 +108,7 @@ const HomeScreen = () => {
         )}
       </Pressable>
     );
-  }, [selectedCategory, theme, totalPotholes]);
+  }, [selectedCategory, theme, totalPotholes, handleCategoryPress]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -124,18 +145,26 @@ const HomeScreen = () => {
       {/* DASHCAM CTA */}
       <Pressable
         onPress={handleDashcam}
+        disabled={isCameraStarting} // Prevent double-taps
         style={({ pressed }) => [
           styles.actionCard,
           {
             backgroundColor: theme.primary,
-            transform: [{ scale: pressed ? 0.97 : 1 }]
+            transform: [{ scale: pressed ? 0.97 : 1 }],
+            justifyContent: 'center', // Center the spinner if loading
           }
         ]}
       >
-        <Text style={styles.actionTitle}>Start Dashcam</Text>
-        <Text style={styles.actionSubtitle}>
-          Real-time pothole detection
-        </Text>
+        {isCameraStarting ? (
+          <ActivityIndicator size="large" color="#ffffff" style={{ marginVertical: 4 }} />
+        ) : (
+          <>
+            <Text style={styles.actionTitle}>Start Dashcam</Text>
+            <Text style={styles.actionSubtitle}>
+              Real-time pothole detection
+            </Text>
+          </>
+        )}
       </Pressable>
 
       {/* GRID */}
@@ -186,6 +215,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 16,
     marginBottom: 20,
+    minHeight: 85, // Added minHeight so the button doesn't shrink when the text swaps to a spinner
   },
 
   actionTitle: {

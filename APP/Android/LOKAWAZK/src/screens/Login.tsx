@@ -102,24 +102,15 @@ const LoginScreen = () => {
             {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.mainButtonText}>LOGIN</Text>}
           </TouchableOpacity>
 
-          <View style={styles.dividerContainer}>
-            <View style={[styles.line, { backgroundColor: activeTheme.border }]} />
-            <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>OR</Text>
-            <View style={[styles.line, { backgroundColor: activeTheme.border }]} />
-          </View>
+          
 
           {/* GOOGLE SIGN IN BUTTON (Custom Styled) */}
-          <TouchableOpacity style={styles.googleButton}>
-            <View style={styles.googleIconBox}>
-              <Text style={styles.googleLetterG}>G</Text>
-            </View>
-            <Text style={styles.googleText}>Sign in with Google</Text>
-          </TouchableOpacity>
+          
         </View>
 
         <TouchableOpacity onPress={() => navigation.navigate('SignUp' as never)} style={styles.footer}>
           <Text style={[styles.footerText, { color: activeTheme.textSecondary }]}>
-            NEW OPERATOR? <Text style={[styles.link, { color: activeTheme.primary }]}>REGISTER HUB</Text>
+            New User? <Text style={[styles.link, { color: activeTheme.primary }]}>REGISTER HERE</Text>
           </Text>
         </TouchableOpacity>
       </View>
