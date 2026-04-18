@@ -274,10 +274,10 @@ body {
 }
 
 .status-badge {
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -287,13 +287,13 @@ body {
 }
 
 .status-badge.unresolved {
-  background: rgba(255, 153, 51, 0.15);
-  color: #d97706;
+  background: rgba(231, 111, 81, 0.15);
+  color: #e76f51;
 }
 
 .status-badge.flagged-for-review {
   background: rgba(15, 42, 86, 0.12);
-  color: #0f2a56;
+  color: #2b4a7f;
 }
 
 .stats-card,
@@ -406,4 +406,120 @@ body {
 .flagged-bar {
   background: rgba(15, 42, 86, 0.12);
   color: #0f2a56;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.delete-mode-btn {
+  border: none;
+  background: #dc2626;
+  color: white;
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.delete-mode-btn:hover {
+  background: #b91c1c;
+}
+
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  background: white;
+  padding: 14px 16px;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 42, 86, 0.08);
+  flex-wrap: wrap;
+}
+
+.select-all-btn {
+  border: none;
+  background: #0f2a56;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.selected-count {
+  color: #334155;
+  font-weight: 600;
+}
+
+.confirm-delete-btn {
+  border: none;
+  background: #dc2626;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.confirm-delete-btn:hover {
+  background: #b91c1c;
+}
+
+.confirm-delete-btn:disabled {
+  background: #fca5a5;
+  cursor: not-allowed;
+}
+
+.report-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.report-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.select-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f2a56;
+}
+.report-card {
+  transition: all 0.25s ease;
+}
+
+.report-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 16px 32px rgba(15, 42, 86, 0.12);
+}
+.logout-btn,
+.delete-mode-btn,
+.confirm-delete-btn {
+  transition: all 0.2s ease;
+}
+
+.logout-btn:hover {
+  transform: translateY(-1px);
+}
+
+.delete-mode-btn:hover,
+.confirm-delete-btn:hover {
+  transform: translateY(-1px);
+}
+.chart-card {
+  transition: all 0.25s ease;
+}
+
+.chart-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(15, 42, 86, 0.1);
 }

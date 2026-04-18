@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import logo from "../assets/lokawazlogo.png";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 function Home() {
   const navigate = useNavigate();
@@ -10,10 +18,67 @@ function Home() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedReports, setSelectedReports] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+
 
   const handleLogout = () => {
     navigate("/login");
   };
+  const toggleSelectionMode = () => {
+  setSelectionMode((prev) => !prev);
+  setSelectedReports([]); };
+  const toggleReportSelection = (reportId) => {
+    setSelectedReports((prev) =>
+        prev.includes(reportId)
+    ? prev.filter((id) => id !== reportId)
+    : [...prev, reportId]
+    ); };
+
+const handleSelectAll = () => {
+  if (selectedReports.length === reports.length) {
+    setSelectedReports([]);
+  } else {
+    setSelectedReports(reports.map((report) => report.id));
+  }
+};
+
+const handleDeleteSelected = async () => {
+  if (selectedReports.length === 0) {
+    alert("Please select at least one report to delete.");
+    return;
+  }
+
+  const confirmDelete = window.confirm(
+    `Are you sure you want to delete ${selectedReports.length} selected report(s)?`
+  );
+
+  if (!confirmDelete) return;
+
+  try {
+    setDeleting(true);
+
+    for (const reportId of selectedReports) {
+      await deleteDoc(doc(db, "pothole_reports", reportId));
+    }
+
+    setReports((prev) =>
+      prev.filter((report) => !selectedReports.includes(report.id))
+    );
+
+    setSelectedReports([]);
+    setSelectionMode(false);
+
+    alert("Selected reports deleted successfully.");
+  } catch (error) {
+    console.error("Error deleting reports:", error);
+    alert("Failed to delete selected reports.");
+  } finally {
+    setDeleting(false);
+  }
+};
+  
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -76,6 +141,12 @@ function Home() {
       flagged,
     };
   }, [reports]);
+  const pieData = [
+    { name: "Resolved", value: stats.resolved },
+    { name: "Pending", value: stats.pending },
+    { name: "Flagged", value: stats.flagged }, ];
+
+const PIE_COLORS = ["#138808", "#e76f51", "#0f2a56"];
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "No timestamp";
@@ -111,9 +182,14 @@ function Home() {
           <img src={logo} alt="LokAwaaz Logo" className="home-logo" />
         </div>
 
-        <button className="logout-btn" onClick={handleLogout}>
-          Logout
-        </button>
+        <div className="topbar-actions">
+            <button className="delete-mode-btn" onClick={toggleSelectionMode}>
+                {selectionMode ? "Cancel" : "Delete Reports"}
+            </button>
+            <button className="logout-btn" onClick={handleLogout}>
+                Logout
+            </button>
+        </div>
       </header>
 
       <div className="home-content">
@@ -122,6 +198,22 @@ function Home() {
             <h2>Incoming Reports</h2>
             <p>Live reports received from the civic reporting system</p>
           </div>
+          {selectionMode && reports.length > 0 && (
+            <div className="selection-toolbar">
+                <button className="select-all-btn" onClick={handleSelectAll}>
+                    {selectedReports.length === reports.length ? "Unselect All" : "Select All"}
+                </button>
+                <span className="selected-count">
+                    {selectedReports.length} selected
+                </span>
+                <button
+                className="confirm-delete-btn"
+                onClick={handleDeleteSelected}
+                disabled={deleting}>
+                    {deleting ? "Deleting..." : "Delete Selected"}
+                </button>
+            </div>
+        )}
 
           {loading ? (
             <div className="empty-state">Loading reports...</div>
@@ -133,6 +225,18 @@ function Home() {
             <div className="reports-list">
               {reports.map((report) => (
                 <div className="report-card" key={report.id}>
+                    {selectionMode && (
+                        <div className="report-select-row">
+                            <input
+                            type="checkbox"
+                            checked={selectedReports.includes(report.id)}
+                            onChange={() => toggleReportSelection(report.id)}
+                            className="report-checkbox"
+                            />
+                        <span className="select-label">Select</span>
+                    </div>
+                )}
+
                   <div className="report-top">
                     <div>
                       <h3>Pothole Report</h3>
@@ -211,23 +315,30 @@ function Home() {
 
           <div className="chart-card">
             <h3>Status Overview</h3>
-            <div className="mini-stat-block">
-              <div className="mini-bar resolved-bar">
-                <span>Resolved</span>
-                <strong>{stats.resolved}</strong>
-              </div>
+            
+            <div className="pie-chart-wrapper">
+                <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                        <Pie
+                         data={pieData}
+                         dataKey="value"
+                         nameKey="name"
+                         cx="50%"
+                         cy="50%"
+                         outerRadius={80}
+                         label
+                        >
+                         {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} />
+                         ))}
+                        </Pie>
 
-              <div className="mini-bar pending-bar">
-                <span>Pending</span>
-                <strong>{stats.pending}</strong>
-              </div>
-
-              <div className="mini-bar flagged-bar">
-                <span>Flagged</span>
-                <strong>{stats.flagged}</strong>
-              </div>
+                        <Tooltip />
+                        <Legend />
+                    </PieChart>
+                </ResponsiveContainer>
             </div>
-          </div>
+        </div>
 
           <div className="chart-card">
             <h3>Heatmap Placeholder</h3>
