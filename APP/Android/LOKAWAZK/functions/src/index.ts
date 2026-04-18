@@ -17,7 +17,6 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
  * ==========================================
  */
 
-// Haversine formula to calculate distance in KM
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -32,7 +31,6 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   return R * c;
 }
 
-// Downloads an image URL and converts it to Base64 for Gemini
 async function fetchImageAsBase64(url: string): Promise<string> {
   const response = await fetch(url);
   const buffer = await response.arrayBuffer();
@@ -42,7 +40,6 @@ async function fetchImageAsBase64(url: string): Promise<string> {
 /**
  * ==========================================
  * TRIGGER 1: NEW REPORT CREATED
- * Action: Finds nearest on-duty free worker
  * ==========================================
  */
 export const assignPotholeTask = onDocumentCreated(
@@ -113,7 +110,6 @@ export const assignPotholeTask = onDocumentCreated(
 /**
  * ==========================================
  * TRIGGER 2: AI REPAIR VERIFICATION
- * Action: Worker submits photo -> Gemini checks -> Approves/Rejects
  * ==========================================
  */
 export const verifyRepair = onDocumentUpdated(
@@ -129,12 +125,11 @@ export const verifyRepair = onDocumentUpdated(
     const after = data.after.data();
     const reportId = event.params.reportId;
 
-    // 🔥 Trigger only when the mobile app updates status to "Pending_Verification"
     if (before.status !== "Pending_Verification" && after.status === "Pending_Verification") {
       logger.info(`[verifyRepair] 🤖 Initiating AI verification for report ${reportId}`);
 
       const originalImageUrl = after.imageUrl;
-      const completionImage = after.completionImage; // 🔥 Using the exact field name from your database
+      const completionImage = after.completionImage;
 
       if (!originalImageUrl || !completionImage) {
         logger.error(`[verifyRepair] ❌ Missing images for ${reportId}. Rejecting.`);
@@ -180,7 +175,7 @@ export const verifyRepair = onDocumentUpdated(
           { inlineData: { data: repairBase64, mimeType: "image/jpeg" } }
         ];
 
-        logger.info(`[verifyRepair] 🧠 Sending payload to Gemini 1.5 Flash...`);
+        logger.info(`[verifyRepair] 🧠 Sending payload to Gemini 2.5 Flash...`);
         const result = await model.generateContent([prompt, ...imageParts]);
         const responseText = result.response.text();
         const aiDecision = JSON.parse(responseText);
@@ -188,7 +183,6 @@ export const verifyRepair = onDocumentUpdated(
         logger.info(`[verifyRepair] ⚖️ Decision: Verified=${aiDecision.verified}. Reason: ${aiDecision.reason}`);
 
         if (aiDecision.verified === true) {
-          // 🎉 Setting to Resolved will automatically trigger `onTaskResolved`
           await event.data?.after.ref.update({
             status: "Resolved",
             ai_audit_notes: aiDecision.reason,
@@ -196,12 +190,13 @@ export const verifyRepair = onDocumentUpdated(
           });
           logger.info(`[verifyRepair] 🎉 Report ${reportId} approved & marked Resolved!`);
         } else {
+          // 🔥 FIX: FieldValue.delete() REMOVED.
+          // The image now remains in the database so you can audit it manually later.
           await event.data?.after.ref.update({
             status: "Rejected",
-            ai_audit_notes: aiDecision.reason,
-            completionImage: FieldValue.delete() // Clear the bad image so they can try again
+            ai_audit_notes: aiDecision.reason
           });
-          logger.info(`[verifyRepair] 🚫 Report ${reportId} rejected by AI.`);
+          logger.info(`[verifyRepair] 🚫 Report ${reportId} rejected by AI. Image retained for auditing.`);
         }
 
       } catch (error) {
@@ -216,7 +211,6 @@ export const verifyRepair = onDocumentUpdated(
 /**
  * ==========================================
  * TRIGGER 3: TASK CHAINING
- * Action: AI marks as Resolved -> Free worker -> Assign next task
  * ==========================================
  */
 export const onTaskResolved = onDocumentUpdated(
@@ -243,7 +237,6 @@ export const onTaskResolved = onDocumentUpdated(
         const staffData = staffDoc.data();
         const staffLoc = staffData?.location;
 
-        // 🔥 ADDED .limit(50) to prevent Out-Of-Memory DB crashes!
         const pendingQuery = await db.collection("pothole_reports")
           .where("status", "==", "Pending")
           .limit(50) 
@@ -297,7 +290,6 @@ export const onTaskResolved = onDocumentUpdated(
 /**
  * ==========================================
  * TRIGGER 4: STAFF CLOCKS IN
- * Action: Worker goes on-duty -> Search backlog -> Assign task
  * ==========================================
  */
 export const onStaffAvailable = onDocumentUpdated(
@@ -318,7 +310,6 @@ export const onStaffAvailable = onDocumentUpdated(
       try {
         const staffLoc = after.location;
 
-        // 🔥 ADDED .limit(50) to prevent Out-Of-Memory DB crashes!
         const pendingQuery = await db.collection("pothole_reports")
           .where("status", "==", "Pending")
           .limit(50)
