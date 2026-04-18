@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "LOKAWAZK",
+    "slug": "LOKAWAZK",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+
+    "ios": {
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "YOUR_IOS_MAPS_KEY"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow app to access your camera",
+        "NSSpeechRecognitionUsageDescription": "Allow app to use speech recognition",
+        "NSMicrophoneUsageDescription": "Allow app to use the microphone"
+      }
+    },
+
+    "android": {
+      "package": "com.pratyansha_rana.LOKAWAZK",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_MAPS_KEY"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "react-native-vision-camera",
+      "react-native-fast-tflite",
+      "expo-sqlite",
+      "expo-speech-recognition",
+      "expo-audio",
+      "@react-native-google-signin/google-signin"
+    ],
+
+    "extra": {
+      "eas": {
+        "projectId": "eb0be02f-a4e2-4397-b5e8-d4b72b9524d1"
+      }
+    },
+
+    "owner": "pratyansha_rana"
+  }
+}
