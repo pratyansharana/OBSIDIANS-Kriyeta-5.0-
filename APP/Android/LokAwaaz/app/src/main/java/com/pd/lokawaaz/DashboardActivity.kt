@@ -16,6 +16,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.GeoPoint
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.storage.FirebaseStorage
 import com.google.android.gms.maps.*
 import com.google.android.gms.maps.model.*
@@ -42,9 +43,11 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    // 🔥 NEW: location tracking
     private lateinit var locationCallback: LocationCallback
     private var workerMarker: Marker? = null
+
+    // 🔥 NEW: real-time listener
+    private var taskListener: ListenerRegistration? = null
 
     private val cameraLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -84,14 +87,13 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             return
         }
 
-        // 🔥 DUTY STATUS
+        // Duty status
         db.collection("field_staff")
             .document(uid)
             .get()
             .addOnSuccessListener { doc ->
                 val isOnDuty = doc.getBoolean("duty_status") ?: false
                 switchDuty.isChecked = isOnDuty
-
                 if (isOnDuty) startLocationUpdates()
             }
 
@@ -108,10 +110,10 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
-        loadAssignedTask(uid)
+        // 🔥 REAL-TIME TASK LISTENER
+        listenForTaskUpdates(uid)
 
         btnCaptureImage.setOnClickListener {
-
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
 
@@ -136,42 +138,66 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    // 🔥 LOCATION UPDATES
-    private fun startLocationUpdates() {
+    // 🔥 REAL-TIME TASK FUNCTION
+    private fun listenForTaskUpdates(uid: String) {
 
+        taskListener = db.collection("field_staff")
+            .document(uid)
+            .addSnapshotListener { doc, _ ->
+
+                if (doc == null || !doc.exists()) return@addSnapshotListener
+
+                val newRid = doc.getString("assignedTask")
+
+                // Prevent unnecessary reload
+                if (newRid == currentRid) return@addSnapshotListener
+
+                if (newRid.isNullOrEmpty()) {
+                    currentRid = null
+
+                    txtTask.text = "No Assigned Task"
+                    txtDescription.text = "You are currently free."
+
+                    imgPothole.setImageDrawable(null)
+                    btnCaptureImage.visibility = View.GONE
+                    btnSubmit.visibility = View.GONE
+
+                    if (::mMap.isInitialized) mMap.clear()
+
+                } else {
+                    currentRid = newRid
+
+                    txtTask.text = "Task Assigned"
+
+                    btnCaptureImage.visibility = View.VISIBLE
+                    btnSubmit.visibility = View.VISIBLE
+                    imgPothole.visibility = View.VISIBLE
+
+                    loadReport(newRid)
+                }
+            }
+    }
+
+    // 🔥 LOCATION
+    private fun startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
 
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                100
-            )
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 100)
             return
         }
 
-        val request = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            5000
-        ).build()
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000).build()
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val location = result.lastLocation ?: return
-
-                val lat = location.latitude
-                val lng = location.longitude
-
-                updateMapLocation(lat, lng)
-                updateLocationToFirestore(lat, lng)
+                updateMapLocation(location.latitude, location.longitude)
+                updateLocationToFirestore(location.latitude, location.longitude)
             }
         }
 
-        fusedLocationClient.requestLocationUpdates(
-            request,
-            locationCallback,
-            mainLooper
-        )
+        fusedLocationClient.requestLocationUpdates(request, locationCallback, mainLooper)
     }
 
     private fun stopLocationUpdates() {
@@ -184,9 +210,7 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
         val latLng = LatLng(lat, lng)
 
         if (workerMarker == null) {
-            workerMarker = mMap.addMarker(
-                MarkerOptions().position(latLng).title("You")
-            )
+            workerMarker = mMap.addMarker(MarkerOptions().position(latLng).title("You"))
         } else {
             workerMarker!!.position = latLng
         }
@@ -207,43 +231,9 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             )
     }
 
-    // 📦 REMAINING CODE (UNCHANGED LOGIC)
-
     private fun createImageUri(): Uri {
         val file = File(externalCacheDir, "captured_${System.currentTimeMillis()}.jpg")
         return FileProvider.getUriForFile(this, "${packageName}.provider", file)
-    }
-
-    private fun loadAssignedTask(uid: String) {
-        db.collection("field_staff")
-            .document(uid)
-            .get()
-            .addOnSuccessListener { staff ->
-
-                val rid = staff.getString("assignedTask")
-
-                if (rid.isNullOrEmpty()) {
-                    currentRid = null
-                    txtTask.text = "No Assigned Task"
-                    txtDescription.text = "You are currently free. Live location active."
-
-                    imgPothole.setImageDrawable(null)
-                    btnCaptureImage.visibility = View.GONE
-                    btnSubmit.visibility = View.GONE
-
-                    if (::mMap.isInitialized) mMap.clear()
-                    return@addOnSuccessListener
-                }
-
-                currentRid = rid
-                txtTask.text = "Task Assigned"
-
-                btnCaptureImage.visibility = View.VISIBLE
-                btnSubmit.visibility = View.VISIBLE
-                imgPothole.visibility = View.VISIBLE
-
-                loadReport(rid)
-            }
     }
 
     private fun loadReport(rid: String) {
@@ -251,13 +241,8 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             .document(rid)
             .get()
             .addOnSuccessListener { report ->
-
-                val imageUrl = report.getString("imageUrl")
-                val description = report.getString("description")
-
-                txtDescription.text = description ?: "No description"
-
-                Glide.with(this).load(imageUrl).into(imgPothole)
+                txtDescription.text = report.getString("description") ?: "No description"
+                Glide.with(this).load(report.getString("imageUrl")).into(imgPothole)
             }
     }
 
@@ -291,14 +276,11 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             .update(
                 mapOf(
                     "assignedTask" to "",
-                    "resolvedCount" to FieldValue.increment(1) // 🔥 FIXED
+                    "resolvedCount" to FieldValue.increment(1)
                 )
             )
 
         Toast.makeText(this, "Task Submitted ✅", Toast.LENGTH_SHORT).show()
-
-// 🔥 Reload new task after resolving
-        loadAssignedTask(uid)
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
@@ -307,11 +289,7 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
 
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                100
-            )
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 100)
             return
         }
 
@@ -321,5 +299,10 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onPause() {
         super.onPause()
         stopLocationUpdates()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        taskListener?.remove()
     }
 }
