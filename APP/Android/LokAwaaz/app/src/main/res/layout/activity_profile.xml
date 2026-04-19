@@ -52,7 +52,7 @@
                     android:id="@+id/tvDepartment"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Department"
+                    android:text="Department:PWD"
                     android:textSize="16sp"
                     android:textColor="@color/text_secondary"
                     android:layout_marginBottom="6dp"/>
@@ -61,7 +61,7 @@
                     android:id="@+id/tvDesignation"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Designation"
+                    android:text="Designation:Field Staff"
                     android:textSize="16sp"
                     android:textColor="@color/text_secondary"/>
 
