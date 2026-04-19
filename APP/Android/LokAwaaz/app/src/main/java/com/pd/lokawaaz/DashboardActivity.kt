@@ -46,6 +46,9 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var locationCallback: LocationCallback
     private var workerMarker: Marker? = null
 
+    // 🔥 ONLY ADD THIS
+    private var taskMarker: Marker? = null
+
     private var taskListener: ListenerRegistration? = null
 
     private val cameraLauncher = registerForActivityResult(
@@ -86,7 +89,6 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             return
         }
 
-        // 🔥 LOAD DUTY STATUS
         db.collection("field_staff")
             .document(uid)
             .get()
@@ -98,11 +100,9 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
                 else stopLocationUpdates()
             }
 
-        // 🔥 UPDATED TOGGLE LOGIC
         switchDuty.setOnCheckedChangeListener { _, isChecked ->
 
             if (isChecked) {
-                // 🟢 ON DUTY
                 db.collection("field_staff")
                     .document(uid)
                     .update("duty_status", true)
@@ -110,19 +110,17 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
                 startLocationUpdates()
 
             } else {
-                // 🔴 OFF DUTY
                 db.collection("field_staff")
                     .document(uid)
                     .update(
                         mapOf(
                             "duty_status" to false,
-                            "assignedTask" to ""   // 🔥 REMOVE TASK
+                            "assignedTask" to ""
                         )
                     )
 
                 stopLocationUpdates()
 
-                // 🔥 CLEAR UI
                 currentRid = null
 
                 txtTask.text = "Off Duty"
@@ -140,7 +138,6 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
-        // 🔥 REAL-TIME TASK LISTENER
         listenForTaskUpdates(uid)
 
         btnCaptureImage.setOnClickListener {
@@ -169,7 +166,6 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    // 🔥 REAL-TIME TASK FUNCTION
     private fun listenForTaskUpdates(uid: String) {
 
         taskListener = db.collection("field_staff")
@@ -179,8 +175,6 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
                 if (doc == null || !doc.exists()) return@addSnapshotListener
 
                 val isOnDuty = doc.getBoolean("duty_status") ?: false
-
-                // ❌ IGNORE if OFF DUTY
                 if (!isOnDuty) return@addSnapshotListener
 
                 val newRid = doc.getString("assignedTask")
@@ -272,13 +266,40 @@ class DashboardActivity : AppCompatActivity(), OnMapReadyCallback {
         return FileProvider.getUriForFile(this, "${packageName}.provider", file)
     }
 
+    // 🔥 ONLY CHANGE HERE
     private fun loadReport(rid: String) {
         db.collection("pothole_reports")
             .document(rid)
             .get()
             .addOnSuccessListener { report ->
+
                 txtDescription.text = report.getString("description") ?: "No description"
                 Glide.with(this).load(report.getString("imageUrl")).into(imgPothole)
+
+                val locationField = report.get("location")
+
+                var latLng: LatLng? = null
+
+                if (locationField is GeoPoint) {
+                    latLng = LatLng(locationField.latitude, locationField.longitude)
+                } else if (locationField is Map<*, *>) {
+                    val lat = locationField["lat"] as? Double
+                    val lng = locationField["lng"] as? Double
+                    if (lat != null && lng != null) {
+                        latLng = LatLng(lat, lng)
+                    }
+                }
+
+                if (latLng != null && ::mMap.isInitialized) {
+                    taskMarker?.remove()
+
+                    taskMarker = mMap.addMarker(
+                        MarkerOptions()
+                            .position(latLng)
+                            .title("Task Location")
+                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                    )
+                }
             }
     }
 
