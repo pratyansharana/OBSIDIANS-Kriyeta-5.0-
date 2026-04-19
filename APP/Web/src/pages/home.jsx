@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
+import ReportsHeatmap from "./ReportsHeatmap";
 
 function Home() {
   const navigate = useNavigate();
@@ -360,10 +361,8 @@ const PIE_COLORS = [
         </div>
 
           <div className="chart-card">
-            <h3>Heatmap Placeholder</h3>
-            <div className="chart-placeholder">
-              Later you can show issue density using lat/lng data
-            </div>
+            <h3>Issue Heatmap</h3>
+            <ReportsHeatmap reports={reports} />
           </div>
         </aside>
       </div>
