@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import logo from "../assets/lokawazlogo.png";
+import { APIProvider, Map, Marker } from "@vis.gl/react-google-maps";
+import workerIcon from "../assets/worker.png";
 
 function ReportDetails() {
   const { id } = useParams();
@@ -11,41 +13,22 @@ function ReportDetails() {
   const [report, setReport] = useState(null);
   const [worker, setWorker] = useState(null);
 
-  const parseWorkerLocation = (locationValue) => {
-    if (!locationValue) return { lat: null, lng: null };
+const parseWorkerLocation = (locationValue) => {
+  if (!locationValue) return { lat: null, lng: null };
 
-    // if someday you store as object
-    if (
-      typeof locationValue === "object" &&
-      !Array.isArray(locationValue) &&
-      locationValue.lat !== undefined &&
-      locationValue.lng !== undefined
-    ) {
-      return {
-        lat: Number(locationValue.lat),
-        lng: Number(locationValue.lng),
-      };
-    }
+  if (
+    typeof locationValue === "object" &&
+    locationValue.latitude !== undefined &&
+    locationValue.longitude !== undefined
+  ) {
+    return {
+      lat: Number(locationValue.latitude),
+      lng: Number(locationValue.longitude),
+    };
+  }
 
-    // current format: ["22.8208015° N", "75.9428743° E"]
-    if (Array.isArray(locationValue) && locationValue.length >= 2) {
-      const rawLat = String(locationValue[0]);
-      const rawLng = String(locationValue[1]);
-
-      let lat = parseFloat(rawLat);
-      let lng = parseFloat(rawLng);
-
-      if (rawLat.includes("S")) lat = -Math.abs(lat);
-      if (rawLng.includes("W")) lng = -Math.abs(lng);
-
-      return {
-        lat: Number.isNaN(lat) ? null : lat,
-        lng: Number.isNaN(lng) ? null : lng,
-      };
-    }
-
-    return { lat: null, lng: null };
-  };
+  return { lat: null, lng: null };
+};
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "N/A";
@@ -68,6 +51,8 @@ function ReportDetails() {
   };
 
   useEffect(() => {
+    let unsubscribeWorker = null;
+
     const fetchReportAndWorker = async () => {
       try {
         const reportRef = doc(db, "pothole_reports", id);
@@ -84,14 +69,22 @@ function ReportDetails() {
 
         if (reportData.assigned_to) {
           const workerRef = doc(db, "field_staff", reportData.assigned_to);
-          const workerSnap = await getDoc(workerRef);
 
-          if (workerSnap.exists()) {
-            setWorker(workerSnap.data());
-          } else {
-            setWorker(null);
-            console.log("Worker document not found");
-          }
+          unsubscribeWorker = onSnapshot(
+            workerRef,
+            (workerSnap) => {
+              if (workerSnap.exists()) {
+                setWorker(workerSnap.data());
+              } else {
+                setWorker(null);
+                console.log("Worker document not found");
+              }
+            },
+            (error) => {
+              console.error("Error listening to worker details:", error);
+              setWorker(null);
+            }
+          );
         } else {
           setWorker(null);
         }
@@ -101,6 +94,12 @@ function ReportDetails() {
     };
 
     fetchReportAndWorker();
+
+    return () => {
+      if (unsubscribeWorker) {
+        unsubscribeWorker();
+      }
+    };
   }, [id]);
 
   const handleStatusUpdate = async (newStatus) => {
@@ -214,40 +213,48 @@ function ReportDetails() {
             </div>
 
             {/* Worker map */}
-            <div className="worker-section-card">
-              <h3 className="worker-section-title">Worker Location</h3>
+            {/* Worker map */}
+<div className="worker-section-card">
+  <h3 className="worker-section-title">Worker Live Location</h3>
 
-              {workerLat && workerLng ? (
-                <>
-                  <div className="details-row">
-                    <span className="details-label">Latitude</span>
-                    <span className="details-value">{workerLat}</span>
-                  </div>
+  {workerLat && workerLng ? (
+    <>
+      <div className="details-row">
+        <span className="details-label">Latitude</span>
+        <span className="details-value">{workerLat}</span>
+      </div>
 
-                  <div className="details-row">
-                    <span className="details-label">Longitude</span>
-                    <span className="details-value">{workerLng}</span>
-                  </div>
+      <div className="details-row">
+        <span className="details-label">Longitude</span>
+        <span className="details-value">{workerLng}</span>
+      </div>
 
-                  <div className="worker-map-wrapper">
-                    <iframe
-                      title="Worker Location Map"
-                      width="100%"
-                      height="280"
-                      className="worker-map-frame"
-                      loading="lazy"
-                      allowFullScreen
-                      src={`https://www.google.com/maps?q=${workerLat},${workerLng}&z=15&output=embed`}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="worker-map-fallback">
-                  Worker location not available
-                </p>
-              )}
-            </div>
-
+      <div className="worker-map-wrapper">
+        <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}>
+          <Map
+            center={{ lat: workerLat, lng: workerLng }}
+            zoom={17}
+            gestureHandling="greedy"
+            disableDefaultUI={false}
+            style={{ width: "100%", height: "280px" }}
+          >
+            <Marker
+              position={{ lat: workerLat, lng: workerLng }}
+              icon={{
+                url: workerIcon,
+                scaledSize: new window.google.maps.Size(80, 80),
+              }}
+            />
+          </Map>
+        </APIProvider>
+      </div>
+    </>
+  ) : (
+    <p className="worker-map-fallback">
+      Worker location not available
+    </p>
+  )}
+</div>
             {/* Completion image */}
             <div className="worker-section-card">
               <h3 className="worker-section-title">Completion Image</h3>
@@ -269,14 +276,14 @@ function ReportDetails() {
           {/* RIGHT SIDE */}
           <div className="details-info-card">
             <div className="details-row">
-                <span className="details-label">Status</span>
-                <span 
-                  className={`status-badge ${report.status
-                    ?.toLowerCase()
-                    .replace(/[\s_]+/g, "-")}`}
-                >
-                 {report.status?.replace(/_/g, " ") || "N/A"}
-                </span>
+              <span className="details-label">Status</span>
+              <span
+                className={`status-badge ${report.status
+                  ?.toLowerCase()
+                  .replace(/[\s_]+/g, "-")}`}
+              >
+                {report.status?.replace(/_/g, " ") || "N/A"}
+              </span>
             </div>
 
             <div className="details-row">
