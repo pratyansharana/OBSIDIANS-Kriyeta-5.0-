@@ -1,299 +1,189 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  ActivityIndicator,
-  TouchableOpacity,
-  Alert,
-  Image,
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, 
+  Image, Alert, SafeAreaView, Dimensions, TextInput, ScrollView 
 } from 'react-native';
-
-import MapView, { Marker } from 'react-native-maps';
+import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
+import { useAppTheme } from '../Context/Themecontext';
+import { uploadPotholeReport, auth } from '../Firebase/FirebaseConfig';
 
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+// 🔥 ADDED IMPORTS
+import * as ImageManipulator from 'expo-image-manipulator';
 
-import { auth } from '../Firebase/FirebaseConfig';
-import { addToQueue, processQueue } from '../services/QueueService'; 
-// 👆 adjust path based on your project
+const { width } = Dimensions.get('window');
+const ISSUE_TYPES = ['Roads', 'Electricity', 'Sanitation', 'Garbage', 'Other'];
 
-const ManualReportingScreen = () => {
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [isCamera, setIsCamera] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
+const ManualReportScreen = () => {
+  const { theme } = useAppTheme();
+  const navigation = useNavigation();
   const device = useCameraDevice('back');
-  const { hasPermission, requestPermission } = useCameraPermission();
+  const camera = useRef<Camera>(null);
 
-  const cameraRef = useRef<Camera>(null);
+  // Existing States
+  const [hasPermissions, setHasPermissions] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
 
-  // ================= INIT LOCATION =================
+  // 🔥 NEW FORM STATES
+  const [description, setDescription] = useState('');
+  const [selectedType, setSelectedType] = useState('Roads');
+
   useEffect(() => {
     (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+      const cameraStatus = await Camera.requestCameraPermission();
+      const locationStatus = await Location.requestForegroundPermissionsAsync();
+      setHasPermissions(cameraStatus === 'granted' && locationStatus.status === 'granted');
 
-        if (status !== 'granted') {
-          Alert.alert('Permission denied', 'Location required');
-          setLoading(false);
-          return;
-        }
-
-        if (!hasPermission) {
-          await requestPermission();
-        }
-
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        setLocation({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-
-      } catch (e) {
-        console.log(e);
-      } finally {
-        setLoading(false);
+      if (locationStatus.status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setLocation(loc);
       }
     })();
   }, []);
 
-  // ================= CAPTURE PHOTO =================
-  const capturePhoto = async () => {
-    if (!cameraRef.current) return;
-
-    try {
-      const photo = await cameraRef.current.takePhoto({
-        flash: 'auto',
-      });
-
-      setPhotoUri(`file://${photo.path}`);
-      setIsCamera(false);
-    } catch (e) {
-      Alert.alert('Error', 'Camera failed');
+  // 🔥 COMPRESSED PHOTO CAPTURE
+  const takePhoto = async () => {
+    if (camera.current) {
+      try {
+        const photo = await camera.current.takePhoto({ qualityPrioritization: 'speed' });
+        
+        // Compress the image immediately
+        const compressedImage = await ImageManipulator.manipulateAsync(
+          `file://${photo.path}`,
+          [{ resize: { width: 1080 } }], // Resize for speed/size
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        
+        setPhotoUri(compressedImage.uri);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to take/compress picture.');
+      }
     }
   };
 
-  // ================= SUBMIT (QUEUE SYSTEM) =================
   const submitReport = async () => {
-    if (!location || !photoUri) {
-      Alert.alert('Missing data', 'Photo + location required');
-      return;
-    }
+    if (!photoUri || !location) return;
 
+    setIsUploading(true);
     try {
-      setSubmitting(true);
-
-      // 🔥 STEP 1: Add to SQLite queue
-      addToQueue(
+      const userId = auth.currentUser?.uid;
+      
+      // Pass new form fields to your existing upload function
+      const success = await uploadPotholeReport(
         photoUri,
-        location.latitude,
-        location.longitude,
-        auth.currentUser?.uid
+        location.coords.latitude,
+        location.coords.longitude,
+        userId,
+        description, 
+        selectedType 
       );
 
-      // 🔥 STEP 2: Try immediate sync (if internet available)
-      await processQueue();
-
-      Alert.alert(
-        'Saved',
-        'Report added to queue. It will sync automatically.'
-      );
-
-      setPhotoUri(null);
-    } catch (e) {
-      console.log(e);
-      Alert.alert('Error', 'Failed to queue report');
+      if (success) {
+        Alert.alert('Success', 'Report submitted successfully!', [
+          { text: 'OK', onPress: () => { setPhotoUri(null); setDescription(''); } }
+        ]);
+      } else {
+        throw new Error("Upload failed");
+      }
+    } catch (error) {
+      Alert.alert('Upload Failed', 'Please try again.');
     } finally {
-      setSubmitting(false);
+      setIsUploading(false);
     }
   };
 
-  // ================= CAMERA MODE =================
-  if (isCamera && device) {
-    return (
-      <View style={styles.container}>
-        <Camera
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          device={device}
-          isActive
-          photo
-        />
-
-        <View style={styles.cameraBar}>
-          <TouchableOpacity onPress={() => setIsCamera(false)}>
-            <Text style={{ color: '#fff' }}>CANCEL</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.capture} onPress={capturePhoto}>
-            <View style={styles.captureInner} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // ================= LOADING =================
-  if (loading || !location) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#00FF00" />
-        <Text style={{ color: '#888', marginTop: 10 }}>
-          Getting location...
-        </Text>
-      </View>
-    );
-  }
+  if (!hasPermissions) return null;
+  if (device == null) return <ActivityIndicator />;
 
   return (
-    <View style={styles.container}>
-
-      {/* MAP (NO GOOGLE DEPENDENCY) */}
-      <MapView
-        style={StyleSheet.absoluteFillObject}
-        initialRegion={{
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        }}
-        onPress={(e) => setLocation(e.nativeEvent.coordinate)}
-        showsUserLocation
-      >
-        <Marker
-          coordinate={location}
-          draggable
-          onDragEnd={(e) => setLocation(e.nativeEvent.coordinate)}
-          pinColor="green"
-        />
-      </MapView>
-
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      
       {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Manual Report</Text>
-        <Text style={styles.sub}>Offline-first queue system</Text>
+      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>MANUAL REPORT</Text>
       </View>
 
-      {/* ACTION BAR */}
-      <View style={styles.actionBar}>
+      <View style={styles.cameraContainer}>
+        {photoUri ? (
+          // 🔥 FORM UI (Only shows after photo is taken)
+          <ScrollView style={styles.formContainer}>
+            <Image source={{ uri: photoUri }} style={styles.previewImage} />
+            
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Issue Type</Text>
+            <View style={styles.typeGrid}>
+              {ISSUE_TYPES.map(type => (
+                <TouchableOpacity 
+                  key={type} 
+                  style={[styles.typePill, selectedType === type && { backgroundColor: theme.primary }]}
+                  onPress={() => setSelectedType(type)}
+                >
+                  <Text style={{ color: selectedType === type ? '#FFF' : theme.textPrimary }}>{type}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-        <TouchableOpacity
-          style={styles.photoBox}
-          onPress={() => setIsCamera(true)}
-        >
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.preview} />
-          ) : (
-            <Text style={{ color: '#fff' }}>+ Photo</Text>
-          )}
-        </TouchableOpacity>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Description</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.surface, color: theme.textPrimary, borderColor: theme.border }]}
+              placeholder="Briefly describe the issue..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              onChangeText={setDescription}
+            />
 
-        <TouchableOpacity
-          style={styles.submit}
-          onPress={submitReport}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={{ color: '#000', fontWeight: 'bold' }}>
-              Queue Report
-            </Text>
-          )}
-        </TouchableOpacity>
-
+            <TouchableOpacity 
+              style={[styles.primaryButton, { backgroundColor: theme.primary }]} 
+              onPress={submitReport}
+              disabled={isUploading}
+            >
+              {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryButtonText}>SUBMIT REPORT</Text>}
+            </TouchableOpacity>
+            
+            <TouchableOpacity onPress={() => setPhotoUri(null)} style={{ marginTop: 20, alignItems: 'center' }}>
+              <Text style={{ color: theme.textSecondary }}>Retake Photo</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        ) : (
+          <Camera ref={camera} style={StyleSheet.absoluteFill} device={device} isActive={true} photo={true} />
+        )}
       </View>
 
-    </View>
+      {/* CAPTURE BUTTON */}
+      {!photoUri && (
+        <View style={styles.controlsContainer}>
+          <TouchableOpacity style={[styles.captureButtonOuter, { borderColor: theme.primary }]} onPress={takePhoto}>
+            <View style={[styles.captureButtonInner, { backgroundColor: theme.primary }]} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </SafeAreaView>
   );
 };
 
-export default ManualReportingScreen;
-
-// ================= STYLES =================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
-
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  header: {
-    position: 'absolute',
-    top: 50,
-    alignSelf: 'center',
-    backgroundColor: '#000000aa',
-    padding: 10,
-    borderRadius: 10,
-  },
-
-  title: { color: '#fff', fontWeight: 'bold' },
-  sub: { color: '#888', fontSize: 10 },
-
-  actionBar: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  photoBox: {
-    flex: 1,
-    height: 55,
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-
-  preview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 10,
-  },
-
-  submit: {
-    flex: 1,
-    height: 55,
-    backgroundColor: '#00FF00',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-
-  cameraBar: {
-    position: 'absolute',
-    bottom: 50,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-
-  capture: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 3,
-    borderColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  captureInner: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#fff',
-  },
+  container: { flex: 1 },
+  header: { padding: 15, alignItems: 'center', borderBottomWidth: 1 },
+  headerTitle: { fontSize: 18, fontWeight: '800', letterSpacing: 1.5 },
+  cameraContainer: { flex: 1, width: '100%', overflow: 'hidden' },
+  
+  // Form Styles
+  formContainer: { padding: 20 },
+  previewImage: { width: '100%', height: 200, borderRadius: 10, marginBottom: 20 },
+  label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  typePill: { padding: 10, borderRadius: 20, borderWidth: 1, borderColor: '#ccc' },
+  input: { padding: 15, borderRadius: 10, height: 100, textAlignVertical: 'top', borderWidth: 1 },
+  
+  // Buttons
+  primaryButton: { padding: 20, borderRadius: 100, alignItems: 'center', marginTop: 20 },
+  primaryButtonText: { color: '#FFF', fontWeight: '800' },
+  
+  controlsContainer: { paddingBottom: 40, alignItems: 'center', paddingTop: 20 },
+  captureButtonOuter: { width: 70, height: 70, borderRadius: 35, borderWidth: 4, justifyContent: 'center', alignItems: 'center' },
+  captureButtonInner: { width: 54, height: 54, borderRadius: 27 },
 });
+
+export default ManualReportScreen;
