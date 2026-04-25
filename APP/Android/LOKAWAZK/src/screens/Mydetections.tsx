@@ -7,19 +7,23 @@ import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestor
 import * as SQLite from 'expo-sqlite';
 import { auth, db } from '../Firebase/FirebaseConfig';
 import { useAppTheme } from '../Context/Themecontext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { doc } from 'firebase/firestore';
+
 
 const { width } = Dimensions.get('window');
 const localDb = SQLite.openDatabaseSync('pothole_queue.db');
 
 const MyDetections = () => {
   const { theme } = useAppTheme();
+  const navigation = useNavigation<any>();
+
   const [activeTab, setActiveTab] = useState<'synced' | 'offline'>('synced');
   const [syncedReports, setSyncedReports] = useState<any[]>([]);
   const [offlineReports, setOfflineReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Firebase Listener (Logic unchanged)
+  // 🔥 Firebase Listener
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -42,18 +46,19 @@ const MyDetections = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Optimized Offline Fetch (Logic preserved, switched to Async to prevent NPE)
+
+
+
+  // 🔥 Offline Fetch
   const fetchOfflineData = async () => {
     try {
-      // Switched to getAllAsync to handle DB locks gracefully
       const rows = await localDb.getAllAsync('SELECT * FROM upload_queue ORDER BY id DESC');
       setOfflineReports(rows);
     } catch (e) {
-      console.log("SQLite Fetch Busy - Retrying on next focus");
+      console.log("SQLite Busy");
     }
   };
 
-  // Refresh offline data whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchOfflineData();
@@ -71,36 +76,57 @@ const MyDetections = () => {
     const lng = isSynced ? item.location?.lng : item.longitude;
 
     return (
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <Image 
-          source={{ uri: isSynced ? item.imageUrl : item.localUri }} 
-          style={styles.cardImage} 
-        />
-        <View style={styles.cardContent}>
-          <View style={styles.statusRow}>
-            <Text style={[styles.cardTitle, { color: isSynced ? theme.primary : '#F59E0B' }]}>
-              {isSynced ? `✅ ${item.status?.toUpperCase() || 'SYNCED'}` : '📵 PENDING SYNC'}
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => {
+          if (isSynced) {
+            navigation.navigate('ReportDetail', { reportId: item.id });
+          }
+        }}
+      >
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          
+          <Image 
+            source={{ uri: isSynced ? item.imageUrl : item.localUri }} 
+            style={styles.cardImage} 
+          />
+
+          <View style={styles.cardContent}>
+            <Text style={[styles.status, { color: isSynced ? theme.primary : '#F59E0B' }]}>
+              {isSynced ? item.status?.toUpperCase() || 'SYNCED' : 'OFFLINE'}
+            </Text>
+
+            <Text style={[styles.coords, { color: theme.textPrimary }]}>
+              {lat?.toFixed(5)}, {lng?.toFixed(5)}
+            </Text>
+
+            <Text style={[styles.time, { color: theme.textSecondary }]}>
+              {displayDate}
             </Text>
           </View>
-          
-          <Text style={[styles.cardSub, { color: theme.textPrimary }]}>
-            LAT: {lat?.toFixed(5) || '0.000'}
-          </Text>
-          <Text style={[styles.cardSub, { color: theme.textPrimary }]}>
-            LNG: {lng?.toFixed(5) || '0.000'}
-          </Text>
-          
-          <Text style={[styles.cardTime, { color: theme.textSecondary }]}>
-            {displayDate}
-          </Text>
+
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>
+          My Detections
+        </Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+          Track all potholes detected by your system — synced & offline queue
+        </Text>
+      </View>
+
+
+      {/* TABS */}
       <View style={[styles.tabContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'synced' && { backgroundColor: theme.primary }]}
           onPress={() => setActiveTab('synced')}
@@ -121,12 +147,13 @@ const MyDetections = () => {
             OFFLINE ({offlineReports.length})
           </Text>
         </TouchableOpacity>
+
       </View>
 
+      {/* LIST */}
       {loading && activeTab === 'synced' ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.primary} size="large" />
-          <Text style={{ color: theme.textSecondary, marginTop: 10 }}>LINKING TO CLOUD...</Text>
         </View>
       ) : (
         <FlatList
@@ -134,52 +161,112 @@ const MyDetections = () => {
           renderItem={renderReportItem}
           keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
           contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.center}>
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                NO {activeTab.toUpperCase()} DETECTIONS LOGGED
+                NO DATA FOUND
               </Text>
             </View>
           }
         />
       )}
+
     </SafeAreaView>
   );
 };
 
+export default MyDetections;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  header: {
+    paddingHorizontal: 20,
+    marginTop: 40, // ✅ top margin fix
+    marginBottom: 10,
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: '900',
+  },
+
+  subtitle: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
   tabContainer: {
     flexDirection: 'row',
-    margin: 20,
+    marginHorizontal: 20,
+    marginBottom: 10,
     borderRadius: 12,
     padding: 4,
     borderWidth: 1,
   },
+
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
     borderRadius: 10,
   },
-  tabText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  list: { paddingHorizontal: 20, paddingBottom: 100 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 },
+
+  tabText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+
+  list: {
+    paddingHorizontal: 20,
+    paddingBottom: 120,
+  },
+
   card: {
     flexDirection: 'row',
     borderRadius: 16,
     marginBottom: 15,
     overflow: 'hidden',
     borderWidth: 1,
-    elevation: 3,
   },
-  cardImage: { width: 110, height: 110 },
-  cardContent: { flex: 1, padding: 15, justifyContent: 'center' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  cardTitle: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  cardSub: { fontSize: 13, fontWeight: '800', fontFamily: 'monospace' },
-  cardTime: { fontSize: 10, marginTop: 6, fontWeight: '600' },
-  emptyText: { fontWeight: '900', fontSize: 12, letterSpacing: 1 }
-});
 
-export default MyDetections;
+  cardImage: {
+    width: 110,
+    height: 110,
+  },
+
+  cardContent: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'center',
+  },
+
+  status: {
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+
+  coords: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  time: {
+    fontSize: 11,
+    marginTop: 6,
+  },
+
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    marginTop: 100,
+  },
+
+  emptyText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+});

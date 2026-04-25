@@ -7,13 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "ios": {
       "supportsTablet": true,
       "config": {
@@ -25,12 +23,11 @@
         "NSMicrophoneUsageDescription": "Allow app to use the microphone"
       }
     },
-
     "android": {
       "package": "com.pratyansha_rana.LOKAWAZK",
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_ANDROID_MAPS_KEY"
+          "apiKey": "AIzaSyD5eNJlP-kk-gTYyL0YSaA2qvKSz0aTwR4"
         }
       },
       "adaptiveIcon": {
@@ -42,14 +39,15 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       [
         "expo-build-properties",
@@ -64,15 +62,20 @@
       "expo-sqlite",
       "expo-speech-recognition",
       "expo-audio",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-font"
     ],
-
     "extra": {
       "eas": {
         "projectId": "eb0be02f-a4e2-4397-b5e8-d4b72b9524d1"
       }
     },
-
-    "owner": "pratyansha_rana"
+    "owner": "pratyansha_rana",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/eb0be02f-a4e2-4397-b5e8-d4b72b9524d1"
+    }
   }
 }

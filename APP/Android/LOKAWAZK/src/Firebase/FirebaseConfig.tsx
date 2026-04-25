@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc, increment } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { runTransaction } from 'firebase/firestore';
 
 // 1️⃣ Add your Firebase Web Config here
 const firebaseConfig = {

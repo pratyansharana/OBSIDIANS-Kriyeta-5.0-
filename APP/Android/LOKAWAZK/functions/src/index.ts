@@ -8,7 +8,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 admin.initializeApp();
 const db = getFirestore();
 
-// Securely load your Gemini API Key
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 /**
@@ -39,11 +38,14 @@ async function fetchImageAsBase64(url: string): Promise<string> {
 
 /**
  * ==========================================
- * TRIGGER 1: NEW REPORT CREATED
+ * TRIGGER 1: NEW REPORT CREATED (WITH AI FILTER)
  * ==========================================
  */
 export const assignPotholeTask = onDocumentCreated(
-  "pothole_reports/{reportId}",
+  {
+    document: "pothole_reports/{reportId}",
+    secrets: [geminiApiKey], // Now has access to Gemini
+  },
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return null;
@@ -51,14 +53,53 @@ export const assignPotholeTask = onDocumentCreated(
     const reportData = snapshot.data();
     const reportId = event.params.reportId;
 
-    if (reportData.assigned_to) return null;
+    // Skip if already assigned or already processed by AI
+    if (reportData.assigned_to || reportData.status === "Rejected" || reportData.status === "Assigned") return null;
 
-    logger.info(`[assignPotholeTask] 🆕 New report detected: ${reportId}`);
-
-    const reportLat = reportData.location.lat;
-    const reportLng = reportData.location.lng;
+    logger.info(`[assignPotholeTask] 🤖 Running AI Pothole Validation on: ${reportId}`);
 
     try {
+      // 1. AI VALIDATION
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.5-flash",
+        generationConfig: { responseMimeType: "application/json" } 
+      });
+
+      const base64Image = await fetchImageAsBase64(reportData.imageUrl);
+      
+      const prompt = `
+        Analyze this image. Is it a legitimate road pothole that requires maintenance?
+        Strictly reject: blurry photos, photos of clouds, grass, random objects, or people.
+        Return JSON:
+        {
+          "isValid": boolean,
+          "reason": "1-sentence explanation"
+        }
+      `;
+
+      const result = await model.generateContent([
+        prompt, 
+        { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+      ]);
+      
+      const aiDecision = JSON.parse(result.response.text());
+
+      if (!aiDecision.isValid) {
+        logger.warn(`[assignPotholeTask] 🚫 Report ${reportId} rejected by AI. Reason: ${aiDecision.reason}`);
+        await snapshot.ref.update({ 
+          status: "Rejected", 
+          ai_audit_notes: "AI Validation Failed: " + aiDecision.reason 
+        });
+        return null;
+      }
+
+      logger.info(`[assignPotholeTask] ✅ AI Validated report ${reportId}. Proceeding to assignment.`);
+
+      // 2. ASSIGNMENT LOGIC (Only runs if AI says YES)
+      const reportLat = reportData.location.lat;
+      const reportLng = reportData.location.lng;
+
       const staffQuery = await db
         .collection("field_staff")
         .where("duty_status", "==", true)
@@ -67,7 +108,7 @@ export const assignPotholeTask = onDocumentCreated(
 
       if (staffQuery.empty) {
         logger.warn(`[assignPotholeTask] ⚠️ No free staff for ${reportId}. Marking as Pending.`);
-        await db.collection("pothole_reports").doc(reportId).update({ status: "Pending" });
+        await snapshot.ref.update({ status: "Pending" });
         return null;
       }
 
@@ -86,22 +127,20 @@ export const assignPotholeTask = onDocumentCreated(
       });
 
       if (nearestStaff) {
-        logger.info(`[assignPotholeTask] 🎯 Assigning ${reportId} to ${nearestStaff.name} (Dist: ${minDistance.toFixed(2)}km)`);
-        
         const batch = db.batch();
-        batch.update(db.collection("field_staff").doc(nearestStaff.id), {
-          assignedTask: reportId,
-        });
-        batch.update(db.collection("pothole_reports").doc(reportId), {
+        batch.update(db.collection("field_staff").doc(nearestStaff.id), { assignedTask: reportId });
+        batch.update(snapshot.ref, {
           assigned_to: nearestStaff.fsid,
           assigned_name: nearestStaff.name,
           status: "Assigned",
+          ai_audit_notes: "AI Validated: " + aiDecision.reason
         });
         await batch.commit();
         logger.info(`[assignPotholeTask] ✅ Assignment committed for ${reportId}`);
       }
     } catch (error) {
-      logger.error(`[assignPotholeTask] ❌ Error assigning task ${reportId}:`, error);
+      logger.error(`[assignPotholeTask] ❌ Error in assignment pipeline:`, error);
+      await snapshot.ref.update({ status: "Manual_Review_Required", ai_audit_notes: "AI processing failed." });
     }
     return null;
   }
@@ -134,7 +173,7 @@ export const verifyRepair = onDocumentUpdated(
       if (!originalImageUrl || !completionImage) {
         logger.error(`[verifyRepair] ❌ Missing images for ${reportId}. Rejecting.`);
         await event.data?.after.ref.update({ 
-          status: "Rejected", 
+          status: "Flagged", 
           ai_audit_notes: "Missing before/after image data." 
         });
         return null;
@@ -175,12 +214,9 @@ export const verifyRepair = onDocumentUpdated(
           { inlineData: { data: repairBase64, mimeType: "image/jpeg" } }
         ];
 
-        logger.info(`[verifyRepair] 🧠 Sending payload to Gemini 2.5 Flash...`);
         const result = await model.generateContent([prompt, ...imageParts]);
         const responseText = result.response.text();
         const aiDecision = JSON.parse(responseText);
-
-        logger.info(`[verifyRepair] ⚖️ Decision: Verified=${aiDecision.verified}. Reason: ${aiDecision.reason}`);
 
         if (aiDecision.verified === true) {
           await event.data?.after.ref.update({
@@ -188,15 +224,11 @@ export const verifyRepair = onDocumentUpdated(
             ai_audit_notes: aiDecision.reason,
             verified_at: FieldValue.serverTimestamp()
           });
-          logger.info(`[verifyRepair] 🎉 Report ${reportId} approved & marked Resolved!`);
         } else {
-          // 🔥 FIX: FieldValue.delete() REMOVED.
-          // The image now remains in the database so you can audit it manually later.
           await event.data?.after.ref.update({
             status: "Rejected",
             ai_audit_notes: aiDecision.reason
           });
-          logger.info(`[verifyRepair] 🚫 Report ${reportId} rejected by AI. Image retained for auditing.`);
         }
 
       } catch (error) {
@@ -228,8 +260,6 @@ export const onTaskResolved = onDocumentUpdated(
       
       if (!staffId) return null;
 
-      logger.info(`[onTaskResolved] 🔄 Report ${reportId} closed. Finding next task for staff: ${staffId}`);
-
       try {
         const staffDoc = await db.collection("field_staff").doc(staffId).get();
         if (!staffDoc.exists) return null;
@@ -245,7 +275,6 @@ export const onTaskResolved = onDocumentUpdated(
         const batch = db.batch();
 
         if (pendingQuery.empty) {
-          logger.info(`[onTaskResolved] 🏖️ No pending tasks found. Freeing staff ${staffId}.`);
           batch.update(db.collection("field_staff").doc(staffId), { assignedTask: "" });
           await batch.commit();
           return null;
@@ -267,8 +296,6 @@ export const onTaskResolved = onDocumentUpdated(
 
         if (!nextTask) nextTask = { id: pendingQuery.docs[0].id, ...pendingQuery.docs[0].data() };
 
-        logger.info(`[onTaskResolved] 🎯 Found next nearest task: ${nextTask.id} (${minDistance.toFixed(2)}km)`);
-
         batch.update(db.collection("field_staff").doc(staffId), { assignedTask: nextTask.id });
         batch.update(db.collection("pothole_reports").doc(nextTask.id), {
           assigned_to: staffData?.fsid,
@@ -277,8 +304,6 @@ export const onTaskResolved = onDocumentUpdated(
         });
 
         await batch.commit();
-        logger.info(`[onTaskResolved] ✅ Chained task ${nextTask.id} to staff ${staffId}`);
-
       } catch (error) {
         logger.error(`[onTaskResolved] ❌ Error chaining task after ${reportId}:`, error);
       }
@@ -305,8 +330,6 @@ export const onStaffAvailable = onDocumentUpdated(
     const becameOnDuty = !before.duty_status && after.duty_status;
 
     if (becameOnDuty && after.assignedTask === "") {
-      logger.info(`[onStaffAvailable] 🟢 Staff ${staffId} clocked in. Checking backlog...`);
-
       try {
         const staffLoc = after.location;
 
@@ -315,10 +338,7 @@ export const onStaffAvailable = onDocumentUpdated(
           .limit(50)
           .get();
 
-        if (pendingQuery.empty) {
-          logger.info(`[onStaffAvailable] 🏖️ No backlog tasks pending for ${staffId}.`);
-          return null;
-        }
+        if (pendingQuery.empty) return null;
 
         let nextTask: any = null;
         let minDistance = Infinity;
@@ -336,8 +356,6 @@ export const onStaffAvailable = onDocumentUpdated(
 
         if (!nextTask) nextTask = { id: pendingQuery.docs[0].id, ...pendingQuery.docs[0].data() };
 
-        logger.info(`[onStaffAvailable] 🎯 Assigning backlog task ${nextTask.id} to ${staffId}`);
-
         const batch = db.batch();
         batch.update(db.collection("field_staff").doc(staffId), { assignedTask: nextTask.id });
         batch.update(db.collection("pothole_reports").doc(nextTask.id), {
@@ -347,11 +365,76 @@ export const onStaffAvailable = onDocumentUpdated(
         });
         
         await batch.commit();
-        logger.info(`[onStaffAvailable] ✅ Backlog assignment successful.`);
       } catch (error) {
         logger.error(`[onStaffAvailable] ❌ Error assigning duty backlog to ${staffId}:`, error);
       }
     }
+    return null;
+  }
+);
+
+/**
+ * ==========================================
+ * TRIGGER 5: USER CREDIT REWARD (FINAL)
+ * ==========================================
+ */
+export const rewardUserOnApproval = onDocumentUpdated(
+  "pothole_reports/{reportId}",
+  async (event) => {
+    const data = event.data;
+    if (!data) return null;
+
+    const before = data.before.data();
+    const after = data.after.data();
+    const reportId = event.params.reportId;
+
+    // 🧠 Debug log
+    logger.info(
+      `[rewardUserOnApproval] 🔍 Status Change for ${reportId}: ${before.status} → ${after.status}`
+    );
+
+    // ✅ Only reward ONCE when status becomes "Resolved"
+    if (
+      before.status !== "Resolved" &&
+      after.status === "Resolved" &&
+      !after.rewarded
+    ) {
+      const userId = after.userId;
+
+      if (!userId) {
+        logger.error(
+          `[rewardUserOnApproval] ❌ Missing userId for report ${reportId}`
+        );
+        return null;
+      }
+
+      try {
+        const userRef = db.collection("users").doc(userId);
+
+        // 🎯 Add credits safely
+        await userRef.set(
+          {
+            credits: FieldValue.increment(10),
+          },
+          { merge: true }
+        );
+
+        // 🔒 Mark report as rewarded (prevents duplicate credits)
+        await data.after.ref.update({
+          rewarded: true,
+        });
+
+        logger.info(
+          `[rewardUserOnApproval] 💰 +10 credits given to user ${userId} for report ${reportId}`
+        );
+      } catch (error) {
+        logger.error(
+          `[rewardUserOnApproval] ❌ Error while rewarding user:`,
+          error
+        );
+      }
+    }
+
     return null;
   }
 );
