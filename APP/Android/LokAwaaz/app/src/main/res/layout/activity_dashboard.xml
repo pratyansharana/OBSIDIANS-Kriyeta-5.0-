@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -8,95 +9,134 @@
         android:id="@+id/map"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent" />
 
-    <!-- 🔥 TOP BAR (FIXED VISIBILITY) -->
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:orientation="horizontal"
-        android:padding="12dp"
-        android:layout_width="match_parent"
+    <!-- 🔝 TOP FLOATING CARD -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="#CCFFFFFF"
-        android:elevation="8dp">
+        android:layout_margin="16dp"
+        android:layout_gravity="top|start"
+        app:cardCornerRadius="30dp"
+        app:cardElevation="8dp"
+        android:backgroundTint="@android:color/white">
 
-        <ImageView
-            android:id="@+id/imgProfile"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@android:drawable/ic_menu_myplaces"
-            android:background="@drawable/bg_circle"
-            android:padding="8dp"
-            android:layout_marginEnd="12dp"/>
-
-        <Switch
-            android:id="@+id/switchDuty"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:showText="true"
-            android:textOn="ON DUTY"
-            android:textOff="OFF DUTY"
-            android:textColor="@android:color/black"
-            android:textSize="14sp"/>
-    </LinearLayout>
+            android:orientation="horizontal"
+            android:padding="10dp"
+            android:gravity="center_vertical">
 
-    <!-- 🔽 TASK PANEL -->
-    <LinearLayout
+            <ImageView
+                android:id="@+id/imgProfile"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_menu_myplaces"
+                android:background="@drawable/bg_circle"
+                android:padding="6dp"
+                android:layout_marginEnd="10dp"/>
+
+            <Switch
+                android:id="@+id/switchDuty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ON Duty"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#2E7D32"
+                android:layout_marginStart="8dp"/>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 🔽 BOTTOM SHEET CARD -->
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/taskPanel"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:background="@android:color/white"
-        android:layout_alignParentBottom="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:elevation="10dp">
+        android:layout_gravity="bottom"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="10dp"
+        android:backgroundTint="@android:color/white">
 
-        <TextView
-            android:id="@+id/txtTask"
-            android:text="No Assigned Task"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
-        <ImageView
-            android:id="@+id/imgPothole"
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:layout_marginTop="8dp"
-            android:scaleType="centerCrop"
-            android:contentDescription="Pothole image" />
-
-        <TextView
-            android:id="@+id/txtDescription"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Description"
-            android:layout_marginTop="4dp"/>
-
-        <!-- 🔥 BUTTON ROW -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <Button
-                android:id="@+id/btnCaptureImage"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Capture"/>
+            <!-- Drag Indicator -->
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center"
+                android:background="#CCCCCC"
+                android:layout_marginBottom="10dp"/>
 
-            <Button
-                android:id="@+id/btnSubmit"
-                android:layout_width="0dp"
+            <!-- Title -->
+            <TextView
+                android:id="@+id/txtTask"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Submit"
-                android:layout_marginStart="8dp"/>
+                android:text="Assigned Task"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_gravity="center"/>
+
+            <!-- Image -->
+            <ImageView
+                android:id="@+id/imgPothole"
+                android:layout_width="match_parent"
+                android:layout_height="140dp"
+                android:layout_marginTop="10dp"
+                android:scaleType="centerCrop"
+                android:background="#EEEEEE"/>
+
+            <!-- Description -->
+            <TextView
+                android:id="@+id/txtDescription"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Fix pothole near central mall. Priority: High"
+                android:textSize="13sp"
+                android:layout_marginTop="8dp"
+                android:textColor="#666666"/>
+
+            <!-- Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="12dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCaptureImage"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:text="Capture Proof"
+                    android:textSize="12sp"
+                    app:cornerRadius="12dp"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSubmit"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:text="Submit"
+                    android:textSize="12sp"
+                    android:layout_marginStart="8dp"
+                    app:cornerRadius="12dp"/>
+            </LinearLayout>
+
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-    </LinearLayout>
-
-</RelativeLayout>
+</FrameLayout>

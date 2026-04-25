@@ -11,6 +11,9 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebase";
+import ReportsHeatmap from "./ReportsHeatmap";
 
 function Home() {
   const navigate = useNavigate();
@@ -23,8 +26,13 @@ function Home() {
   const [deleting, setDeleting] = useState(false);
 
 
-  const handleLogout = () => {
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
   const toggleSelectionMode = () => {
   setSelectionMode((prev) => !prev);
@@ -117,36 +125,44 @@ const handleDeleteSelected = async () => {
   }, []);
 
   const stats = useMemo(() => {
-    const resolved = reports.filter(
-      (report) => report.status?.toLowerCase() === "resolved"
-    ).length;
+  const resolved = reports.filter(
+    (report) => report.status?.toLowerCase() === "resolved"
+  ).length;
 
-    const pending = reports.filter(
-      (report) => report.status?.toLowerCase() === "pending"
-    ).length;
+  const pending = reports.filter(
+    (report) => report.status?.toLowerCase() === "pending"
+  ).length;
 
-    const flagged = reports.filter((report) => {
-      const status = report.status?.toLowerCase();
-      return (
-        status === "flagged" ||
-        status === "flagged for review" ||
-        status === "under review"
-      );
-    }).length;
+  const rejected = reports.filter(
+    (report) => report.status?.toLowerCase() === "rejected"
+  ).length;
 
-    return {
-      total: reports.length,
-      resolved,
-      pending,
-      flagged,
-    };
-  }, [reports]);
-  const pieData = [
-    { name: "Resolved", value: stats.resolved },
-    { name: "Pending", value: stats.pending },
-    { name: "Flagged", value: stats.flagged }, ];
+  const manualReviewRequired= reports.filter(
+    (report) => report.status?.toLowerCase() === "manual_review_required"
+  ).length;
 
-const PIE_COLORS = ["#138808", "#e76f51", "#0f2a56"];
+  return {
+    total: reports.length,
+    resolved,
+    pending,
+    rejected,
+    manualReviewRequired,
+  };
+}, [reports]);
+
+const pieData = [
+  { name: "Resolved", value: stats.resolved },
+  { name: "Pending", value: stats.pending },
+  { name: "Rejected", value: stats.rejected },
+  { name: "Manual Review Required", value: stats.manualReviewRequired },
+];
+
+const PIE_COLORS = [
+  "#138808",
+  "#e76f51",
+  "#dc2626",
+  "#2563eb",
+];
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "No timestamp";
@@ -164,13 +180,8 @@ const PIE_COLORS = ["#138808", "#e76f51", "#0f2a56"];
 
     if (normalized === "resolved") return "resolved";
     if (normalized === "pending") return "pending";
-    if (
-      normalized === "flagged" ||
-      normalized === "flagged for review" ||
-      normalized === "under review"
-    ) {
-      return "flagged";
-    }
+    if (normalized === "rejected") return "rejected";
+    if (normalized === "manual_review_required") return "manual-review-required";
     return "pending";
   };
 
@@ -312,8 +323,13 @@ const PIE_COLORS = ["#138808", "#e76f51", "#0f2a56"];
             </div>
 
             <div className="stat-row">
-              <span>Flagged / Review</span>
-              <strong>{stats.flagged}</strong>
+              <span>Rejected</span>
+              <strong>{stats.rejected}</strong>
+            </div>
+
+            <div className="stat-row">
+              <span>Manual Review Required</span>
+              <strong>{stats.manualReviewRequired}</strong>
             </div>
           </div>
 
@@ -345,10 +361,8 @@ const PIE_COLORS = ["#138808", "#e76f51", "#0f2a56"];
         </div>
 
           <div className="chart-card">
-            <h3>Heatmap Placeholder</h3>
-            <div className="chart-placeholder">
-              Later you can show issue density using lat/lng data
-            </div>
+            <h3>Issue Heatmap</h3>
+            <ReportsHeatmap reports={reports} />
           </div>
         </aside>
       </div>
